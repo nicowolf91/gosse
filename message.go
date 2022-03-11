@@ -13,13 +13,12 @@ type Messager interface {
 	Retry() time.Duration
 }
 
-type MessageRepository interface {
-	MessageStorer
-	GetReplay(channelID, lastID string) []Messager
-}
-
 type MessageStorer interface {
 	Store(channelID string, msg Messager)
+}
+
+type MessageReplayer interface {
+	GetReplay(channelID, lastID string) []Messager
 }
 
 type MessageToBytesConverter func(Messager) []byte
@@ -154,7 +153,10 @@ func WithRetry(d time.Duration) MessageValueSetter {
 	}
 }
 
-type nopMessageStore struct{}
+type nopMessageStorer struct{}
 
-func (n nopMessageStore) Store(channelID string, msg Messager)          {}
-func (n nopMessageStore) GetReplay(channelID, lastID string) []Messager { return nil }
+func (n nopMessageStorer) Store(channelID string, msg Messager) {}
+
+type nopMessageReplayer struct{}
+
+func (n nopMessageReplayer) GetReplay(channelID, lastID string) []Messager { return nil }

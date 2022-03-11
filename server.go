@@ -14,7 +14,8 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 	options := &ServerOptions{
 		channelIDExtractor:         DefaultChannelIDExtractor,
 		messageConverter:           DefaultMessageToBytesConverter,
-		messageRepository:          nopMessageStore{},
+		messageStorer:              nopMessageStorer{},
+		messageReplayer:            nopMessageReplayer{},
 		listenersKeepAliveInterval: 10 * time.Second,
 		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
 	}
@@ -25,7 +26,7 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 
 	return &Server{
 		options:  options,
-		channels: newChannels(options.messageConverter, options.messageRepository),
+		channels: newChannels(options.messageConverter, options.messageStorer),
 	}
 }
 
@@ -67,7 +68,7 @@ func (s *Server) getReplayBytes(r *http.Request, channelID string) [][]byte {
 	}
 
 	var ret [][]byte
-	replayMessages := s.options.messageRepository.GetReplay(channelID, lastID)
+	replayMessages := s.options.messageReplayer.GetReplay(channelID, lastID)
 	for _, msg := range replayMessages {
 		ret = append(ret, s.options.messageConverter(msg))
 	}
@@ -83,7 +84,8 @@ var DefaultChannelIDExtractor ChannelIDExtractor = func(r *http.Request) (string
 type ServerOptions struct {
 	channelIDExtractor         ChannelIDExtractor
 	messageConverter           MessageToBytesConverter
-	messageRepository          MessageRepository
+	messageStorer              MessageStorer
+	messageReplayer            MessageReplayer
 	listenersKeepAliveInterval time.Duration
 	listenersKeepAliveMessage  Messager
 }
@@ -106,10 +108,18 @@ func WithMessageToBytesConverter(m MessageToBytesConverter) ServerOptionSetter {
 	}
 }
 
-func WithMessageRepository(m MessageRepository) ServerOptionSetter {
+func WithMessageStorer(m MessageStorer) ServerOptionSetter {
 	return func(options *ServerOptions) {
 		if m != nil {
-			options.messageRepository = m
+			options.messageStorer = m
+		}
+	}
+}
+
+func WithMessageReplayer(m MessageReplayer) ServerOptionSetter {
+	return func(options *ServerOptions) {
+		if m != nil {
+			options.messageReplayer = m
 		}
 	}
 }
