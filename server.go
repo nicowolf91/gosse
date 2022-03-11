@@ -12,11 +12,11 @@ type Server struct {
 
 func NewServer(optionSetters ...ServerOptionSetter) *Server {
 	options := &ServerOptions{
-		channelIDExtractor:             DefaultChannelIDExtractor,
-		messageConverter:               DefaultMessageToBytesConverter,
-		messageRepository:              nopMessageStore{},
-		listenersKeepAliveInterval:     10 * time.Second,
-		listenersKeepAliveMessageBytes: DefaultKeepAliveMessageBytes,
+		channelIDExtractor:         DefaultChannelIDExtractor,
+		messageConverter:           DefaultMessageToBytesConverter,
+		messageRepository:          nopMessageStore{},
+		listenersKeepAliveInterval: 10 * time.Second,
+		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
 	}
 
 	for _, setter := range optionSetters {
@@ -41,7 +41,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	listenerConn, err := newListenerConn(
 		w,
 		s.options.listenersKeepAliveInterval,
-		s.options.listenersKeepAliveMessageBytes,
+		s.options.messageConverter(s.options.listenersKeepAliveMessage),
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,11 +81,11 @@ var DefaultChannelIDExtractor ChannelIDExtractor = func(r *http.Request) (string
 }
 
 type ServerOptions struct {
-	channelIDExtractor             ChannelIDExtractor
-	messageConverter               MessageToBytesConverter
-	messageRepository              MessageRepository
-	listenersKeepAliveInterval     time.Duration
-	listenersKeepAliveMessageBytes []byte
+	channelIDExtractor         ChannelIDExtractor
+	messageConverter           MessageToBytesConverter
+	messageRepository          MessageRepository
+	listenersKeepAliveInterval time.Duration
+	listenersKeepAliveMessage  Messager
 }
 
 type ServerOptionSetter func(*ServerOptions)
@@ -120,10 +120,10 @@ func WithListenersKeepAliveInterval(d time.Duration) ServerOptionSetter {
 	}
 }
 
-func WithListenersKeepAliveMessageBytes(b []byte) ServerOptionSetter {
+func WithListenersKeepAliveMessage(msg Messager) ServerOptionSetter {
 	return func(options *ServerOptions) {
-		if len(b) > 0 {
-			options.listenersKeepAliveMessageBytes = b
+		if msg != nil {
+			options.listenersKeepAliveMessage = msg
 		}
 	}
 }

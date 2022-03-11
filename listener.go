@@ -86,6 +86,6 @@ type responseWriteFlusher interface {
 	http.Flusher
 }
 
-var DefaultKeepAliveMessageBytes = DefaultMessageToBytesConverter(NewMessage().WithData([]byte(": ")))
+var DefaultKeepAliveMessage = NewMessage().WithData([]byte(": "))
 
 const headerLastEventID = "Last-Event-ID"
