@@ -55,23 +55,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channel := s.channels.get(channelID)
-	stream := channel.stream()
-	replayBytes := s.getReplayBytes(r, channelID)
 
-	listenerConn.run(r.Context(), replayBytes, stream)
+	replayMessages := s.getReplayMessages(r, channelID)
+	stream := channel.stream()
+
+	listenerConn.run(r.Context(), s.toReplayBytes(replayMessages), stream)
 }
 
-func (s *Server) getReplayBytes(r *http.Request, channelID string) [][]byte {
+func (s *Server) getReplayMessages(r *http.Request, channelID string) []Messager {
 	lastID := r.Header.Get(headerLastEventID)
 	if lastID == "" {
 		return nil
 	}
 
+	return s.options.messageReplayer.GetReplay(channelID, lastID)
+}
+
+func (s *Server) toReplayBytes(messages []Messager) [][]byte {
 	var ret [][]byte
-	replayMessages := s.options.messageReplayer.GetReplay(channelID, lastID)
-	for _, msg := range replayMessages {
+	for _, msg := range messages {
 		ret = append(ret, s.options.messageConverter(msg))
 	}
+
 	return ret
 }
 
