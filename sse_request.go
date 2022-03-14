@@ -83,12 +83,18 @@ func serveSseRequest(
 		select {
 		case <-stream.Changes():
 			next := stream.Next()
+			if next == nil {
+				continue
+			}
+
 			bytesToSend, ok := next.([]byte)
-			if ok {
-				_, err := writer.Write(bytesToSend)
-				if err != nil {
-					return
-				}
+			if !ok {
+				continue
+			}
+
+			_, err := writer.Write(bytesToSend)
+			if err != nil {
+				return
 			}
 
 		case <-timer.C:
