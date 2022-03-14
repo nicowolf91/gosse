@@ -3,24 +3,24 @@ package gosse
 import (
 	"context"
 	"fmt"
-	"github.com/imkira/go-observer"
 	"net/http"
 	"time"
 )
 
 var ErrStreamingNotSupported = fmt.Errorf("streaming not supported")
 
-type listenerConn struct {
-	responseWriteFlusher
+type listener struct {
+	rwf               responseWriteFlusher
 	keepAliveInterval time.Duration
 	keepAliveMsgBytes []byte
 }
 
-func newListenerConn(
+func newListener(
 	w http.ResponseWriter,
+	additionalHeader http.Header,
 	keepAliveInterval time.Duration,
 	keepAliveMsgBytes []byte,
-) (*listenerConn, error) {
+) (*listener, error) {
 	rwf, ok := w.(responseWriteFlusher)
 	if !ok {
 		return nil, ErrStreamingNotSupported
@@ -28,21 +28,28 @@ func newListenerConn(
 
 	rwf.Header().Set("Content-Type", "text/event-stream")
 
-	return &listenerConn{
-		responseWriteFlusher: rwf,
-		keepAliveInterval:    keepAliveInterval,
-		keepAliveMsgBytes:    keepAliveMsgBytes,
+	for key, values := range additionalHeader {
+		for _, value := range values {
+			rwf.Header().Add(key, value)
+		}
+	}
+
+	rwf.WriteHeader(http.StatusOK)
+	rwf.Flush()
+
+	return &listener{
+		rwf:               rwf,
+		keepAliveInterval: keepAliveInterval,
+		keepAliveMsgBytes: keepAliveMsgBytes,
 	}, nil
 }
 
-func (l *listenerConn) run(
+func (l *listener) run(
 	ctx context.Context,
-	replay [][]byte,
-	stream observer.Stream,
+	replay []byte,
+	stream Stream,
 ) {
-	for i := 0; i < len(replay); i++ {
-		_ = l.send(replay[i])
-	}
+	_, _ = l.Write(replay)
 
 	timer := time.NewTimer(l.keepAliveInterval)
 	defer timer.Stop()
@@ -57,14 +64,14 @@ func (l *listenerConn) run(
 			next := stream.Next()
 			bytesToSend, ok := next.([]byte)
 			if ok {
-				err := l.send(bytesToSend)
+				_, err := l.Write(bytesToSend)
 				if err != nil {
 					return
 				}
 			}
 
 		case <-timer.C:
-			_ = l.send(l.keepAliveMsgBytes)
+			_, _ = l.Write(l.keepAliveMsgBytes)
 
 		case <-ctx.Done():
 			return
@@ -72,13 +79,13 @@ func (l *listenerConn) run(
 	}
 }
 
-func (l *listenerConn) send(b []byte) error {
-	_, err := l.Write(b)
+func (l *listener) Write(b []byte) (int, error) {
+	n, err := l.rwf.Write(b)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	l.Flush()
-	return nil
+	l.rwf.Flush()
+	return n, nil
 }
 
 type responseWriteFlusher interface {
