@@ -15,6 +15,7 @@ type Messager interface {
 
 type MessageStorer interface {
 	Store(channelID string, msg Messager)
+	StoreBroadcast(msg Messager)
 }
 
 type MessageReplayer interface {
@@ -156,6 +157,8 @@ func WithRetry(d time.Duration) MessageValueSetter {
 type nopMessageStorer struct{}
 
 func (n nopMessageStorer) Store(channelID string, msg Messager) {}
+
+func (n nopMessageStorer) StoreBroadcast(msg Messager) {}
 
 type nopMessageReplayer struct{}
 
