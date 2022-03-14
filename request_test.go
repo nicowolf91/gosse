@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/imkira/go-observer"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -130,10 +131,13 @@ func (n *noFlushMock) WriteHeader(statusCode int)  { n.statusCode = statusCode }
 
 type nopStreamMock struct{}
 
-func (n nopStreamMock) Value() interface{}     { return nil }
-func (n nopStreamMock) Changes() chan struct{} { return make(chan struct{}) }
-func (n nopStreamMock) Next() interface{}      { return nil }
-func (n nopStreamMock) HasNext() bool          { return false }
+func (n nopStreamMock) Value() interface{}                                   { return nil }
+func (n nopStreamMock) Changes() chan struct{}                               { return make(chan struct{}) }
+func (n nopStreamMock) Next() interface{}                                    { return nil }
+func (n nopStreamMock) HasNext() bool                                        { return false }
+func (n nopStreamMock) WaitNext() interface{}                                { return nil }
+func (n nopStreamMock) Clone() observer.Stream                               { return nopStreamMock{} }
+func (n nopStreamMock) WaitNextCtx(ctx context.Context) (interface{}, error) { return nil, nil }
 
 type maxWriter struct {
 	i         int

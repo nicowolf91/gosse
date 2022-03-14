@@ -29,7 +29,7 @@ func (b *broker) Publish(msg interface{}) {
 }
 
 func (b *broker) Subscribe() Stream {
-	return b.p.Observe()
+	return newStream(b.p.Observe())
 }
 
 type channelBroker struct {
