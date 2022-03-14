@@ -93,7 +93,10 @@ func serveSseRequest(
 
 		case <-timer.C:
 			if isKeepAliveActive(keepAliveInterval) {
-				_, _ = writer.Write(keepAliveMsgBytes)
+				_, err := writer.Write(keepAliveMsgBytes)
+				if err != nil {
+					return
+				}
 			}
 
 		case <-ctx.Done():
