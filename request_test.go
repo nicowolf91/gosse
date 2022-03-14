@@ -48,7 +48,7 @@ func TestServeRequestReplayOnly(t *testing.T) {
 }
 
 func TestServeRequestNoKeepAlive(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 111*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	replay := []byte("data: replay\nid: 1\n\nevent: e\ndata: test\nid: 2\n\n")
@@ -56,6 +56,8 @@ func TestServeRequestNoKeepAlive(t *testing.T) {
 		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
 		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
 	}
+
+	writer := newMaxWriter(len(messages))
 
 	expected := make([]byte, len(replay))
 	copy(expected, replay)
@@ -67,10 +69,16 @@ func TestServeRequestNoKeepAlive(t *testing.T) {
 		expected = append(expected, msg...)
 	}
 
-	buf := &bytes.Buffer{}
-	serveRequest(ctx, buf, stream, replay, 0, nil)
+	// ensure that serveRequest handles unexpected/invalid stream elements correctly
+	broker.Publish(nil)
+	broker.Publish(13.37)
 
-	assert.Equal(t, expected, buf.Bytes())
+	// trigger error in writer
+	broker.Publish([]byte("boom"))
+
+	serveRequest(ctx, writer, stream, replay, 0, nil)
+
+	assert.Equal(t, expected, writer.Bytes())
 }
 
 func TestServeRequestWithKeepAlive(t *testing.T) {
