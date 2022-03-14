@@ -76,7 +76,7 @@ func serveSseRequest(
 	defer timer.Stop()
 
 	for {
-		if keepAliveInterval > 0 {
+		if isKeepAliveActive(keepAliveInterval) {
 			timer.Reset(keepAliveInterval)
 		}
 
@@ -92,10 +92,16 @@ func serveSseRequest(
 			}
 
 		case <-timer.C:
-			_, _ = writer.Write(keepAliveMsgBytes)
+			if isKeepAliveActive(keepAliveInterval) {
+				_, _ = writer.Write(keepAliveMsgBytes)
+			}
 
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func isKeepAliveActive(keepAliveInterval time.Duration) bool {
+	return keepAliveInterval > 0
 }
