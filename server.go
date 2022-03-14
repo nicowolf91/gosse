@@ -6,139 +6,154 @@ import (
 )
 
 type Server struct {
-	options  *ServerOptions
-	channels *channels
+	channelIDExtractor         ChannelIDExtractor
+	messageConverter           MessageToBytesConverter
+	messageBroker              ChannelBroker
+	messageStorer              MessageStorer
+	messageReplayer            MessageReplayer
+	listenersAdditionalHeader  http.Header
+	listenersKeepAliveInterval time.Duration
+	listenersKeepAliveMessage  Messager
 }
 
 func NewServer(optionSetters ...ServerOptionSetter) *Server {
-	options := &ServerOptions{
+	ret := &Server{
 		channelIDExtractor:         DefaultChannelIDExtractor,
 		messageConverter:           DefaultMessageToBytesConverter,
+		messageBroker:              NewChannelBroker(),
 		messageStorer:              nopMessageStorer{},
 		messageReplayer:            nopMessageReplayer{},
+		listenersAdditionalHeader:  nil,
 		listenersKeepAliveInterval: 10 * time.Second,
 		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
 	}
 
 	for _, setter := range optionSetters {
-		setter(options)
+		setter(ret)
 	}
 
-	return &Server{
-		options:  options,
-		channels: newChannels(options.messageConverter, options.messageStorer),
-	}
+	return ret
+}
+
+func (s *Server) Publish(channelID string, msg Messager) {
+	s.messageBroker.Publish(channelID, s.msgBytes(msg))
+	s.messageStorer.Store(channelID, msg)
 }
 
 func (s *Server) Broadcast(msg Messager) {
-	s.channels.broadcast(msg)
-}
-
-func (s *Server) Send(channelID string, msg Messager) {
-	s.channels.send(channelID, msg)
+	s.messageBroker.Broadcast(s.msgBytes(msg))
+	s.messageStorer.StoreBroadcast(msg)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	listenerConn, err := newListenerConn(
+	listener, err := newListener(
 		w,
-		s.options.listenersKeepAliveInterval,
-		s.options.messageConverter(s.options.listenersKeepAliveMessage),
+		s.listenersAdditionalHeader,
+		s.listenersKeepAliveInterval,
+		s.messageConverter(s.listenersKeepAliveMessage),
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	channelID, err := s.options.channelIDExtractor(r)
+	channelID, err, httpErrorCode := s.channelIDExtractor(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), httpErrorCode)
+		return
 	}
 
-	channel := s.channels.get(channelID)
-
 	replayMessages := s.getReplayMessages(r, channelID)
-	stream := channel.stream()
+	stream := s.messageBroker.Subscribe(channelID)
 
-	listenerConn.run(r.Context(), s.toReplayBytes(replayMessages), stream)
+	listener.run(r.Context(), s.toReplayBytes(replayMessages), stream)
+}
+
+func (s *Server) msgBytes(msg Messager) []byte {
+	return s.messageConverter(msg)
 }
 
 func (s *Server) getReplayMessages(r *http.Request, channelID string) []Messager {
-	lastID := r.Header.Get(headerLastEventID)
-	if lastID == "" {
+	lastSeenMessageID := r.Header.Get(headerLastEventID)
+	if lastSeenMessageID == "" {
 		return nil
 	}
 
-	return s.options.messageReplayer.GetReplay(channelID, lastID)
+	return s.messageReplayer.GetReplay(channelID, lastSeenMessageID)
 }
 
-func (s *Server) toReplayBytes(messages []Messager) [][]byte {
-	var ret [][]byte
+func (s *Server) toReplayBytes(messages []Messager) []byte {
+	var ret []byte
 	for _, msg := range messages {
-		ret = append(ret, s.options.messageConverter(msg))
+		ret = append(ret, s.messageConverter(msg)...)
 	}
-
 	return ret
 }
 
-type ChannelIDExtractor func(*http.Request) (string, error)
+type ChannelIDExtractor func(*http.Request) (string, error, int)
 
-var DefaultChannelIDExtractor ChannelIDExtractor = func(r *http.Request) (string, error) {
-	return r.URL.Query().Get("channel"), nil
+var DefaultChannelIDExtractor ChannelIDExtractor = func(r *http.Request) (string, error, int) {
+	return r.URL.Query().Get("channel"), nil, http.StatusOK
 }
 
-type ServerOptions struct {
-	channelIDExtractor         ChannelIDExtractor
-	messageConverter           MessageToBytesConverter
-	messageStorer              MessageStorer
-	messageReplayer            MessageReplayer
-	listenersKeepAliveInterval time.Duration
-	listenersKeepAliveMessage  Messager
-}
-
-type ServerOptionSetter func(*ServerOptions)
+type ServerOptionSetter func(*Server)
 
 func WithChannelIDExtractor(g ChannelIDExtractor) ServerOptionSetter {
-	return func(options *ServerOptions) {
+	return func(server *Server) {
 		if g != nil {
-			options.channelIDExtractor = g
+			server.channelIDExtractor = g
 		}
 	}
 }
 
 func WithMessageToBytesConverter(m MessageToBytesConverter) ServerOptionSetter {
-	return func(options *ServerOptions) {
+	return func(server *Server) {
 		if m != nil {
-			options.messageConverter = m
+			server.messageConverter = m
+		}
+	}
+}
+
+func WithChannelMessageBroker(b ChannelBroker) ServerOptionSetter {
+	return func(server *Server) {
+		if b != nil {
+			server.messageBroker = b
 		}
 	}
 }
 
 func WithMessageStorer(m MessageStorer) ServerOptionSetter {
-	return func(options *ServerOptions) {
+	return func(server *Server) {
 		if m != nil {
-			options.messageStorer = m
+			server.messageStorer = m
 		}
 	}
 }
 
 func WithMessageReplayer(m MessageReplayer) ServerOptionSetter {
-	return func(options *ServerOptions) {
+	return func(server *Server) {
 		if m != nil {
-			options.messageReplayer = m
+			server.messageReplayer = m
 		}
 	}
 }
 
+func WithListenersAdditionalHeader(h http.Header) ServerOptionSetter {
+	return func(server *Server) {
+		server.listenersAdditionalHeader = h
+	}
+}
+
 func WithListenersKeepAliveInterval(d time.Duration) ServerOptionSetter {
-	return func(options *ServerOptions) {
-		options.listenersKeepAliveInterval = d
+	return func(server *Server) {
+		server.listenersKeepAliveInterval = d
 	}
 }
 
 func WithListenersKeepAliveMessage(msg Messager) ServerOptionSetter {
-	return func(options *ServerOptions) {
+	return func(server *Server) {
 		if msg != nil {
-			options.listenersKeepAliveMessage = msg
+			server.listenersKeepAliveMessage = msg
 		}
 	}
 }
