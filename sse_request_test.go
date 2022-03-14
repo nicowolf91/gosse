@@ -29,7 +29,7 @@ func TestSseRequestConstructor(t *testing.T) {
 }
 
 func TestSseRequestConstructorNoFlusher(t *testing.T) {
-	_, err := newSseRequest(noFlushMock{}, nil, nil)
+	_, err := newSseRequest(&noFlushMock{}, nil, nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrStreamingNotSupported, err)
 }
@@ -116,11 +116,20 @@ func TestServeSseRequestWithKeepAlive(t *testing.T) {
 	assert.True(t, time.Now().Before(deadline))
 }
 
-type noFlushMock struct{}
+type noFlushMock struct {
+	header     http.Header
+	statusCode int
+}
 
-func (n noFlushMock) Header() http.Header         { return nil }
-func (n noFlushMock) Write(i []byte) (int, error) { return 0, nil }
-func (n noFlushMock) WriteHeader(statusCode int)  {}
+func newNoFlushMock() *noFlushMock {
+	return &noFlushMock{
+		header: http.Header{},
+	}
+}
+
+func (n *noFlushMock) Header() http.Header         { return n.header }
+func (n *noFlushMock) Write(i []byte) (int, error) { return 0, nil }
+func (n *noFlushMock) WriteHeader(statusCode int)  { n.statusCode = statusCode }
 
 type nopStreamMock struct{}
 
