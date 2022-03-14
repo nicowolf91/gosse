@@ -10,22 +10,22 @@ import (
 
 var ErrStreamingNotSupported = fmt.Errorf("streaming not supported")
 
-type responseWriteFlusher interface {
+type ResponseWriteFlusher interface {
 	http.ResponseWriter
 	http.Flusher
 }
 
-type sseRequest struct {
-	rwf         responseWriteFlusher
-	lastEventID string
+type Request struct {
+	ResponseWriteFlusher
+	LastEventID string
 }
 
-func newSseRequest(
+func NewRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	additionalHeader http.Header,
-) (*sseRequest, error) {
-	rwf, ok := w.(responseWriteFlusher)
+) (*Request, error) {
+	rwf, ok := w.(ResponseWriteFlusher)
 	if !ok {
 		return nil, ErrStreamingNotSupported
 	}
@@ -41,28 +41,28 @@ func newSseRequest(
 	rwf.WriteHeader(http.StatusOK)
 	rwf.Flush()
 
-	return &sseRequest{
-		rwf:         rwf,
-		lastEventID: extractLastEventID(r),
+	return &Request{
+		ResponseWriteFlusher: rwf,
+		LastEventID:          ExtractLastEventID(r),
 	}, nil
 }
 
-func (s *sseRequest) Write(b []byte) (int, error) {
-	n, err := s.rwf.Write(b)
+func (s *Request) Write(b []byte) (int, error) {
+	n, err := s.ResponseWriteFlusher.Write(b)
 	if err != nil {
 		return 0, err
 	}
-	s.rwf.Flush()
+	s.ResponseWriteFlusher.Flush()
 	return n, nil
 }
 
-const headerLastEventID = "Last-Event-ID"
+const HeaderKeyLastEventID = "Last-Event-ID"
 
-func extractLastEventID(r *http.Request) string {
-	return r.Header.Get(headerLastEventID)
+func ExtractLastEventID(r *http.Request) string {
+	return r.Header.Get(HeaderKeyLastEventID)
 }
 
-func serveSseRequest(
+func serveRequest(
 	ctx context.Context,
 	writer io.Writer,
 	stream Stream,

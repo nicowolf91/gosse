@@ -58,16 +58,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sseRequest, err := newSseRequest(w, r, s.listenersAdditionalHeader)
+	sseRequest, err := NewRequest(w, r, s.listenersAdditionalHeader)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	replayMessages := s.messageReplayer.GetReplay(channelID, sseRequest.lastEventID)
+	replayMessages := s.messageReplayer.GetReplay(channelID, sseRequest.LastEventID)
 	stream := s.messageBroker.Subscribe(channelID)
 
-	serveSseRequest(
+	serveRequest(
 		r.Context(),
 		sseRequest,
 		stream,
