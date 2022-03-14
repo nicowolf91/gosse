@@ -154,6 +154,8 @@ func WithRetry(d time.Duration) MessageValueSetter {
 	}
 }
 
+var DefaultKeepAliveMessage = NewMessage().WithData([]byte(": "))
+
 type nopMessageStorer struct{}
 
 func (n nopMessageStorer) Store(channelID string, msg Messager) {}

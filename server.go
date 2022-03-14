@@ -46,12 +46,7 @@ func (s *Server) Broadcast(msg Messager) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	listener, err := newListener(
-		w,
-		s.listenersAdditionalHeader,
-		s.listenersKeepAliveInterval,
-		s.messageConverter(s.listenersKeepAliveMessage),
-	)
+	sseRequest, err := newSseRequest(w, r, s.listenersAdditionalHeader)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -63,18 +58,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	replayMessages := s.getReplayMessages(r, channelID)
+	replayMessages := s.getReplayMessages(channelID, sseRequest.lastEventID)
 	stream := s.messageBroker.Subscribe(channelID)
 
-	listener.run(r.Context(), s.toReplayBytes(replayMessages), stream)
+	serveSseRequest(
+		r.Context(),
+		sseRequest,
+		stream,
+		s.toReplayBytes(replayMessages),
+		s.listenersKeepAliveInterval,
+		s.messageConverter(s.listenersKeepAliveMessage),
+	)
 }
 
 func (s *Server) msgBytes(msg Messager) []byte {
 	return s.messageConverter(msg)
 }
 
-func (s *Server) getReplayMessages(r *http.Request, channelID string) []Messager {
-	lastSeenMessageID := r.Header.Get(headerLastEventID)
+func (s *Server) getReplayMessages(channelID, lastSeenMessageID string) []Messager {
 	if lastSeenMessageID == "" {
 		return nil
 	}
