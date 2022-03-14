@@ -47,13 +47,9 @@ func NewRequest(
 	}, nil
 }
 
-func (s *Request) Write(b []byte) (int, error) {
-	n, err := s.ResponseWriteFlusher.Write(b)
-	if err != nil {
-		return 0, err
-	}
-	s.ResponseWriteFlusher.Flush()
-	return n, nil
+func (r *Request) Write(b []byte) (int, error) {
+	defer r.Flush()
+	return r.ResponseWriteFlusher.Write(b)
 }
 
 const HeaderKeyLastEventID = "Last-Event-ID"
