@@ -3,6 +3,7 @@ package gosse
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
@@ -73,10 +74,8 @@ func TestServeSseRequestNoKeepAlive(t *testing.T) {
 }
 
 func TestServeSseRequestWithKeepAlive(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	deadline, ok := ctx.Deadline()
-	assert.True(t, ok)
 
 	messages := [][]byte{
 		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
@@ -91,29 +90,21 @@ func TestServeSseRequestWithKeepAlive(t *testing.T) {
 
 	keepAliveBytes := DefaultMessageToBytesConverter.Convert(DefaultKeepAliveMessage)
 
-	buf := &bytes.Buffer{}
-	go serveSseRequest(ctx, buf, stream, nil, 1*time.Millisecond, keepAliveBytes)
+	writer := newMaxWriter(len(messages) + 1)
+	serveSseRequest(ctx, writer, stream, nil, 1*time.Millisecond, keepAliveBytes)
 
 	splitMinLen := len(messages) + 1 + 1 // one keep alive msg + one empty split entry at the end
 
 	keepAliveDetected := false
-	for {
-		split := bytes.SplitAfter(buf.Bytes(), []byte("\n\n"))
-		if len(split) < splitMinLen {
-			continue
-		}
-
-		assert.True(t, len(split) >= splitMinLen)
-		assert.Equal(t, messages[0], split[0])
-		assert.Equal(t, messages[1], split[1])
-		for i := len(messages); i < len(split)-1; i++ { // last split entry is always empty
-			assert.Equal(t, keepAliveBytes, split[i])
-			keepAliveDetected = true
-		}
-		break
+	split := bytes.SplitAfter(writer.Bytes(), []byte("\n\n"))
+	assert.True(t, len(split) >= splitMinLen)
+	assert.Equal(t, messages[0], split[0])
+	assert.Equal(t, messages[1], split[1])
+	for i := len(messages); i < len(split)-1; i++ { // last split entry is always empty
+		assert.Equal(t, keepAliveBytes, split[i])
+		keepAliveDetected = true
 	}
 	assert.True(t, keepAliveDetected)
-	assert.True(t, time.Now().Before(deadline))
 }
 
 type noFlushMock struct {
@@ -122,9 +113,7 @@ type noFlushMock struct {
 }
 
 func newNoFlushMock() *noFlushMock {
-	return &noFlushMock{
-		header: http.Header{},
-	}
+	return &noFlushMock{header: http.Header{}}
 }
 
 func (n *noFlushMock) Header() http.Header         { return n.header }
@@ -137,3 +126,22 @@ func (n nopStreamMock) Value() interface{}     { return nil }
 func (n nopStreamMock) Changes() chan struct{} { return make(chan struct{}) }
 func (n nopStreamMock) Next() interface{}      { return nil }
 func (n nopStreamMock) HasNext() bool          { return false }
+
+type maxWriter struct {
+	i         int
+	maxWrites int
+	bytes.Buffer
+}
+
+func newMaxWriter(maxWrites int) *maxWriter {
+	return &maxWriter{maxWrites: maxWrites}
+}
+
+func (m *maxWriter) Write(p []byte) (n int, err error) {
+	if m.i > m.maxWrites {
+		return 0, fmt.Errorf("error")
+	}
+
+	m.i++
+	return m.Buffer.Write(p)
+}
