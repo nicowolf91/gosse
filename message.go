@@ -22,9 +22,15 @@ type MessageReplayer interface {
 	GetReplay(channelID, lastSeenMessageID string) []Messager
 }
 
-type MessageToBytesConverter func(Messager) []byte
+type MessageToBytesConverter interface {
+	Convert(Messager) []byte
+}
 
-var DefaultMessageToBytesConverter MessageToBytesConverter = func(msg Messager) []byte {
+var DefaultMessageToBytesConverter = defaultMessageToBytesConverter{}
+
+type defaultMessageToBytesConverter struct{}
+
+func (d defaultMessageToBytesConverter) Convert(msg Messager) []byte {
 	if msg == nil {
 		return nil
 	}

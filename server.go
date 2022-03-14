@@ -23,7 +23,7 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 		messageBroker:              NewChannelBroker(),
 		messageStorer:              nopMessageStorer{},
 		messageReplayer:            nopMessageReplayer{},
-		listenersAdditionalHeader:  nil,
+		listenersAdditionalHeader:  http.Header{},
 		listenersKeepAliveInterval: 10 * time.Second,
 		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
 	}
@@ -46,19 +46,19 @@ func (s *Server) Broadcast(msg Messager) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	channelID, err, httpErrorCode := s.channelIDExtractor.ExtractChannelID(r)
+	if err != nil {
+		http.Error(w, err.Error(), httpErrorCode)
+		return
+	}
+
 	sseRequest, err := newSseRequest(w, r, s.listenersAdditionalHeader)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	channelID, err, httpErrorCode := s.channelIDExtractor(r)
-	if err != nil {
-		http.Error(w, err.Error(), httpErrorCode)
-		return
-	}
-
-	replayMessages := s.getReplayMessages(channelID, sseRequest.lastEventID)
+	replayMessages := s.messageReplayer.GetReplay(channelID, sseRequest.lastEventID)
 	stream := s.messageBroker.Subscribe(channelID)
 
 	serveSseRequest(
@@ -67,33 +67,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		stream,
 		s.toReplayBytes(replayMessages),
 		s.listenersKeepAliveInterval,
-		s.messageConverter(s.listenersKeepAliveMessage),
+		s.messageConverter.Convert(s.listenersKeepAliveMessage),
 	)
 }
 
 func (s *Server) msgBytes(msg Messager) []byte {
-	return s.messageConverter(msg)
-}
-
-func (s *Server) getReplayMessages(channelID, lastSeenMessageID string) []Messager {
-	if lastSeenMessageID == "" {
-		return nil
-	}
-
-	return s.messageReplayer.GetReplay(channelID, lastSeenMessageID)
+	return s.messageConverter.Convert(msg)
 }
 
 func (s *Server) toReplayBytes(messages []Messager) []byte {
 	var ret []byte
 	for _, msg := range messages {
-		ret = append(ret, s.messageConverter(msg)...)
+		ret = append(ret, s.messageConverter.Convert(msg)...)
 	}
 	return ret
 }
 
-type ChannelIDExtractor func(*http.Request) (string, error, int)
+type ChannelIDExtractor interface {
+	ExtractChannelID(r *http.Request) (string, error, int)
+}
 
-var DefaultChannelIDExtractor ChannelIDExtractor = func(r *http.Request) (string, error, int) {
+var DefaultChannelIDExtractor = defaultChannelIDExtractor{}
+
+type defaultChannelIDExtractor struct{}
+
+func (d defaultChannelIDExtractor) ExtractChannelID(r *http.Request) (string, error, int) {
 	return r.URL.Query().Get("channel"), nil, http.StatusOK
 }
 

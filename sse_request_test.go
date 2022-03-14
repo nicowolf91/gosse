@@ -52,8 +52,8 @@ func TestServeSseRequestNoKeepAlive(t *testing.T) {
 
 	replay := []byte("data: replay\nid: 1\n\nevent: e\ndata: test\nid: 2\n\n")
 	messages := [][]byte{
-		DefaultMessageToBytesConverter(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
-		DefaultMessageToBytesConverter(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
+		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
+		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
 	}
 
 	expected := make([]byte, len(replay))
@@ -79,8 +79,8 @@ func TestServeSseRequestWithKeepAlive(t *testing.T) {
 	assert.True(t, ok)
 
 	messages := [][]byte{
-		DefaultMessageToBytesConverter(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
-		DefaultMessageToBytesConverter(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
+		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
+		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
 	}
 
 	broker := NewBroker()
@@ -89,7 +89,7 @@ func TestServeSseRequestWithKeepAlive(t *testing.T) {
 		broker.Publish(msg)
 	}
 
-	keepAliveBytes := DefaultMessageToBytesConverter(DefaultKeepAliveMessage)
+	keepAliveBytes := DefaultMessageToBytesConverter.Convert(DefaultKeepAliveMessage)
 
 	buf := &bytes.Buffer{}
 	go serveSseRequest(ctx, buf, stream, nil, 1*time.Millisecond, keepAliveBytes)

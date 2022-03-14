@@ -135,7 +135,7 @@ func TestDefaultMessageToBytesConverter(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.expected, DefaultMessageToBytesConverter(tc.msg))
+			assert.Equal(t, tc.expected, DefaultMessageToBytesConverter.Convert(tc.msg))
 		})
 	}
 }
