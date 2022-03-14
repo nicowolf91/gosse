@@ -19,7 +19,7 @@ type MessageStorer interface {
 }
 
 type MessageReplayer interface {
-	GetReplay(channelID, lastID string) []Messager
+	GetReplay(channelID, lastSeenMessageID string) []Messager
 }
 
 type MessageToBytesConverter func(Messager) []byte
@@ -162,4 +162,4 @@ func (n nopMessageStorer) StoreBroadcast(msg Messager) {}
 
 type nopMessageReplayer struct{}
 
-func (n nopMessageReplayer) GetReplay(channelID, lastID string) []Messager { return nil }
+func (n nopMessageReplayer) GetReplay(channelID, lastSeenMessageID string) []Messager { return nil }
