@@ -84,6 +84,10 @@ func TestServer_PublishBroadcast(t *testing.T) {
 	server.Publish(channelID, published)
 	server.Broadcast(broadcast)
 
+	// ensure that nil messages are ignored
+	server.Publish(channelID, nil)
+	server.Broadcast(nil)
+
 	assert.Len(t, broker.list[channelID], 1)
 	assert.Len(t, broker.list, 1)
 	assert.Len(t, broker.broadcasts, 1)
