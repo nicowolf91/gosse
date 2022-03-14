@@ -36,11 +36,17 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 }
 
 func (s *Server) Publish(channelID string, msg Messager) {
+	if msg == nil {
+		return
+	}
 	s.messageBroker.Publish(channelID, s.msgBytes(msg))
 	s.messageStorer.Store(channelID, msg)
 }
 
 func (s *Server) Broadcast(msg Messager) {
+	if msg == nil {
+		return
+	}
 	s.messageBroker.Broadcast(s.msgBytes(msg))
 	s.messageStorer.StoreBroadcast(msg)
 }
