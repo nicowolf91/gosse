@@ -2,11 +2,11 @@
     const source = new EventSource('http://localhost:13337?channel=ch1');
 
     source.addEventListener('message', function(e) {
-        console.log(e.data);
+        console.log('message', e.data);
     }, false);
 
     source.addEventListener('test', function(e) {
-        console.log(e.data);
+        console.log('test', e.data);
     }, false);
 
     source.addEventListener('open', function(e) {

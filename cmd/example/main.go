@@ -15,13 +15,12 @@ func main() {
 		i := 1
 		for range time.Tick(1 * time.Second) {
 			if i%2 == 0 {
-				msg := gosse.NewMessage(gosse.WithData([]byte(fmt.Sprintf("broadcast: bar %d", i))))
+				msg := gosse.NewMessage().WithData([]byte(fmt.Sprintf("broadcast: %d", i)))
 				s.Broadcast(msg)
 			} else {
-				msg := gosse.NewMessage(
-					gosse.WithEvent("test"),
-					gosse.WithData([]byte(fmt.Sprintf("bar %d", i))),
-				)
+				msg := gosse.NewMessage().
+					WithEvent("test").
+					WithData([]byte(fmt.Sprintf("ch1: %d", i)))
 				s.Publish("ch1", msg)
 			}
 			i++
