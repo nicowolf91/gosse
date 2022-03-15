@@ -47,6 +47,16 @@ func TestRequest_Write(t *testing.T) {
 	assert.Equal(t, 1, mock.flushed)
 }
 
+func TestExtractLastEventID(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	got := ExtractLastEventID(req)
+	assert.Equal(t, "", got)
+
+	req.Header.Set("Last-Event-ID", "id4711")
+	got = ExtractLastEventID(req)
+	assert.Equal(t, "id4711", got)
+}
+
 func TestServeRequestReplayOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
@@ -167,4 +177,26 @@ func (m *maxWriter) Write(p []byte) (n int, err error) {
 
 	m.i++
 	return m.Buffer.Write(p)
+}
+
+type responseWriteFlusherMock struct {
+	buf        bytes.Buffer
+	statusCode int
+	flushed    int
+}
+
+func (r *responseWriteFlusherMock) Header() http.Header {
+	return nil
+}
+
+func (r *responseWriteFlusherMock) Write(b []byte) (int, error) {
+	return r.buf.Write(b)
+}
+
+func (r *responseWriteFlusherMock) WriteHeader(statusCode int) {
+	r.statusCode = statusCode
+}
+
+func (r *responseWriteFlusherMock) Flush() {
+	r.flushed++
 }
