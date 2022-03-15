@@ -36,6 +36,17 @@ func TestNewRequestNoFlusher(t *testing.T) {
 	assert.Equal(t, ErrStreamingNotSupported, err)
 }
 
+func TestRequest_Write(t *testing.T) {
+	mock := &responseWriteFlusherMock{}
+	request := &Request{ResponseWriteFlusher: mock}
+	toWrite := []byte("test")
+	n, err := request.Write(toWrite)
+	assert.NoError(t, err)
+	assert.Equal(t, n, len(toWrite))
+	assert.Equal(t, toWrite, mock.buf.Bytes())
+	assert.Equal(t, 1, mock.flushed)
+}
+
 func TestServeRequestReplayOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
