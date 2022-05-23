@@ -95,7 +95,7 @@ When the server is running and the client connects successfully the developer co
 should show an output like that (the client will only receive broadcast messages and messages for `channel_1`):
 
 ```
-[...]
+event type -> custom_event | data -> channel_1: 1
 event type -> message | data -> broadcast: 3
 event type -> custom_event | data -> channel_1: 4
 event type -> message | data -> broadcast: 6
