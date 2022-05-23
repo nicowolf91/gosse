@@ -1,0 +1,14 @@
+<script>
+    // connect to the SSE backend on channel "channel_1" (set via query parameter "channel")
+    const source = new EventSource('http://localhost:13337?channel=channel_1');
+
+    // subscribe to data-only messages (events without specific type)
+    source.addEventListener('message', function(e) {
+        console.log('event type ->', e.type, '| data ->', e.data);
+    }, false);
+
+    // subscribe to the messages of the specific type "custom_event"
+    source.addEventListener('custom_event', function(e) {
+        console.log('event type ->', e.type, '| data ->', e.data);
+    }, false);
+</script>
