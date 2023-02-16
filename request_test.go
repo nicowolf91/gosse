@@ -100,17 +100,18 @@ func TestServeRequestWithKeepAlive(t *testing.T) {
 
 	keepAliveBytes := DefaultMessageToBytesConverter.Convert(DefaultKeepAliveMessage)
 
-	writer := newMaxWriter(len(messages) + 1)
+	writer := newMaxWriter(len(messages) + 2) // +2 keep alive messages
 	serveRequest(ctx, writer, stream, nil, 1*time.Millisecond, keepAliveBytes)
 
-	splitMinLen := len(messages) + 1 + 1 // one keep alive msg + one empty split entry at the end
+	splitMinLen := len(messages) + 1 + 1 + 1 // initial keep alive message + one keep alive msg + one empty split entry at the end
 
 	keepAliveDetected := false
 	split := bytes.SplitAfter(writer.Bytes(), []byte("\n\n"))
 	assert.True(t, len(split) >= splitMinLen)
-	assert.Equal(t, messages[0], split[0])
-	assert.Equal(t, messages[1], split[1])
-	for i := len(messages); i < len(split)-1; i++ { // last split entry is always empty
+	assert.Equal(t, keepAliveBytes, split[0])
+	assert.Equal(t, messages[0], split[1])
+	assert.Equal(t, messages[1], split[2])
+	for i := len(messages) + 1; i < len(split)-1; i++ { // last split entry is always empty
 		assert.Equal(t, keepAliveBytes, split[i])
 		keepAliveDetected = true
 	}

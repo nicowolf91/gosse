@@ -68,6 +68,12 @@ func serveRequest(
 ) {
 	_, _ = writer.Write(replay)
 
+	// send keep alive on serve to instantly trigger SSE onopen in firefox and chrome
+	// when no replay messages are sent and a keep alive message is defined
+	if len(replay) == 0 && len(keepAliveMsgBytes) > 0 {
+		_, _ = writer.Write(keepAliveMsgBytes)
+	}
+
 	timer := time.NewTimer(keepAliveInterval)
 	defer timer.Stop()
 
