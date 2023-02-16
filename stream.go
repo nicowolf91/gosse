@@ -2,6 +2,7 @@ package gosse
 
 import (
 	"context"
+
 	"github.com/imkira/go-observer"
 )
 

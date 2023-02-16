@@ -2,9 +2,10 @@ package gosse
 
 import (
 	"context"
+	"testing"
+
 	"github.com/imkira/go-observer"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestStream_WaitNextCtx(t *testing.T) {

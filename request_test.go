@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/imkira/go-observer"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/imkira/go-observer"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewRequest(t *testing.T) {

@@ -1,8 +1,9 @@
 package gosse
 
 import (
-	"github.com/imkira/go-observer"
 	"sync"
+
+	"github.com/imkira/go-observer"
 )
 
 type Broker interface {
