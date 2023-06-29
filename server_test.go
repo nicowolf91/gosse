@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imkira/go-observer/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +18,7 @@ func TestServerConstructorDefaults(t *testing.T) {
 	serverWithDefaultValues := NewServer(
 		WithChannelIDExtractor(DefaultChannelIDExtractor),
 		WithMessageToBytesConverter(DefaultMessageToBytesConverter),
-		WithChannelMessageBroker(NewChannelBroker()),
+		WithChannelMessageBroker(NewChannelBroker[string, Messager]()),
 		WithMessageStorer(nopMessageStorer{}),
 		WithMessageReplayer(nopMessageReplayer{}),
 		WithListenersAdditionalHeader(http.Header{}),
@@ -26,11 +27,10 @@ func TestServerConstructorDefaults(t *testing.T) {
 	)
 
 	server := NewServer()
-
 	assert.Equal(t, server, serverWithDefaultValues)
 	assert.Equal(t, DefaultChannelIDExtractor, serverWithDefaultValues.channelIDExtractor)
 	assert.Equal(t, DefaultMessageToBytesConverter, serverWithDefaultValues.messageConverter)
-	assert.Equal(t, NewChannelBroker(), serverWithDefaultValues.messageBroker)
+	assert.Equal(t, NewChannelBroker[string, Messager](), serverWithDefaultValues.messageBroker)
 	assert.Equal(t, nopMessageStorer{}, serverWithDefaultValues.messageStorer)
 	assert.Equal(t, nopMessageReplayer{}, serverWithDefaultValues.messageReplayer)
 	assert.Equal(t, http.Header{}, serverWithDefaultValues.listenersAdditionalHeader)
@@ -41,7 +41,7 @@ func TestServerConstructorDefaults(t *testing.T) {
 func TestServerConstructor(t *testing.T) {
 	extractor := channelExtractorMock{}
 	converter := messageConverterMock{}
-	broker := newChannelBrokerMock()
+	broker := newChannelBrokerMock[string, Messager]()
 	storer := newMessageStorerMock()
 	replayer := &messageReplayerMock{}
 	additionalHeader := http.Header{}
@@ -71,7 +71,7 @@ func TestServerConstructor(t *testing.T) {
 }
 
 func TestServer_PublishBroadcast(t *testing.T) {
-	broker := newChannelBrokerMock()
+	broker := newChannelBrokerMock[string, Messager]()
 	storer := newMessageStorerMock()
 	server := NewServer(
 		WithChannelMessageBroker(broker),
@@ -92,8 +92,8 @@ func TestServer_PublishBroadcast(t *testing.T) {
 	assert.Len(t, broker.list[channelID], 1)
 	assert.Len(t, broker.list, 1)
 	assert.Len(t, broker.broadcasts, 1)
-	assert.Equal(t, DefaultMessageToBytesConverter.Convert(published), broker.list[channelID][0])
-	assert.Equal(t, DefaultMessageToBytesConverter.Convert(broadcast), broker.broadcasts[0])
+	assert.Equal(t, published, broker.list[channelID][0])
+	assert.Equal(t, broadcast, broker.broadcasts[0])
 
 	assert.Len(t, storer.list[channelID], 1)
 	assert.Len(t, storer.list, 1)
@@ -151,8 +151,9 @@ func TestServer_ServeHTTP(t *testing.T) {
 
 	var expectedBytes []byte
 	for _, msg := range replayMessages {
-		expectedBytes = append(expectedBytes, DefaultMessageToBytesConverter.Convert(msg)...)
+		expectedBytes = append(expectedBytes, server.messageConverter.Convert(msg)...)
 	}
+	expectedBytes = append(expectedBytes, server.messageConverter.Convert(server.listenersKeepAliveMessage)...)
 
 	assert.Equal(t, expectedBytes, recorder.Body.Bytes())
 	assert.Equal(t, "c1", replayer.channelID)
@@ -173,31 +174,35 @@ type messageConverterMock struct{}
 
 func (m messageConverterMock) Convert(msg Messager) []byte { return nil }
 
-type channelBrokerMock struct {
-	list       map[string][]interface{}
-	broadcasts []interface{}
+type channelBrokerMock[ChannelIdType comparable, MessageType any] struct {
+	list       map[ChannelIdType][]MessageType
+	broadcasts []MessageType
 	m          sync.Mutex
 }
 
-func newChannelBrokerMock() *channelBrokerMock {
-	return &channelBrokerMock{
-		list: make(map[string][]interface{}),
+func newChannelBrokerMock[ChannelIdType comparable, MessageType any]() *channelBrokerMock[ChannelIdType, MessageType] {
+	return &channelBrokerMock[ChannelIdType, MessageType]{
+		list: make(map[ChannelIdType][]MessageType),
 	}
 }
 
-func (c *channelBrokerMock) Publish(channelID string, msg interface{}) {
+func (c *channelBrokerMock[ChannelIdType, MessageType]) Publish(channelID ChannelIdType, msg MessageType) {
 	c.m.Lock()
 	defer c.m.Unlock()
 	c.list[channelID] = append(c.list[channelID], msg)
 }
 
-func (c *channelBrokerMock) Broadcast(msg interface{}) {
+func (c *channelBrokerMock[ChannelIdType, MessageType]) Broadcast(msg MessageType) {
 	c.m.Lock()
 	defer c.m.Unlock()
 	c.broadcasts = append(c.broadcasts, msg)
 }
 
-func (c *channelBrokerMock) Subscribe(channelID string) Stream { return nopStreamMock{} }
+func (c *channelBrokerMock[ChannelIdType, MessageType]) Subscribe(channelID ChannelIdType) observer.Stream[MessageType] {
+	var zeroVal MessageType
+	prop := observer.NewProperty(zeroVal)
+	return prop.Observe()
+}
 
 type messageStorerMock struct {
 	list       map[string][]interface{}

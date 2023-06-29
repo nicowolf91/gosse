@@ -2,10 +2,13 @@ package gosse
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/imkira/go-observer/v2"
 )
 
 var ErrStreamingNotSupported = fmt.Errorf("streaming not supported")
@@ -59,60 +62,56 @@ func ExtractLastEventID(r *http.Request) string {
 }
 
 func serveRequest(
-	ctx context.Context,
+	baseCtx context.Context,
 	writer io.Writer,
-	stream Stream,
-	replay []byte,
+	messageToBytesConverter MessageToBytesConverter,
+	stream observer.Stream[Messager],
+	replayMessages []Messager,
 	keepAliveInterval time.Duration,
-	keepAliveMsgBytes []byte,
+	keepAliveMsg Messager,
 ) {
-	_, _ = writer.Write(replay)
-
-	// send keep alive on serve to instantly trigger SSE onopen in firefox and chrome
-	// when no replay messages are sent and a keep alive message is defined
-	if len(replay) == 0 && len(keepAliveMsgBytes) > 0 {
-		_, _ = writer.Write(keepAliveMsgBytes)
+	for _, replayMessage := range replayMessages {
+		_, err := writer.Write(messageToBytesConverter.Convert(replayMessage))
+		if err != nil {
+			return
+		}
 	}
 
-	timer := time.NewTimer(keepAliveInterval)
-	defer timer.Stop()
+	// send keep alive on serve to instantly trigger SSE onopen in firefox and chrome
+	if isKeepAliveActive(keepAliveMsg, keepAliveInterval) {
+		_, err := writer.Write(messageToBytesConverter.Convert(keepAliveMsg))
+		if err != nil {
+			return
+		}
+	}
 
 	for {
-		if isKeepAliveActive(keepAliveInterval) {
-			timer.Reset(keepAliveInterval)
+		innerCtx, cancel := context.WithCancel(baseCtx)
+		if isKeepAliveActive(keepAliveMsg, keepAliveInterval) {
+			innerCtx, cancel = context.WithTimeout(baseCtx, keepAliveInterval)
 		}
 
-		select {
-		case <-stream.Changes():
-			next := stream.Next()
-			if next == nil {
-				continue
-			}
-
-			bytesToSend, ok := next.([]byte)
-			if !ok {
-				continue
-			}
-
-			_, err := writer.Write(bytesToSend)
-			if err != nil {
+		nextMsg, err := stream.WaitNextCtx(innerCtx)
+		cancel()
+		if err != nil {
+			if baseCtx.Err() != nil || !errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
 
-		case <-timer.C:
-			if isKeepAliveActive(keepAliveInterval) {
-				_, err := writer.Write(keepAliveMsgBytes)
-				if err != nil {
-					return
-				}
+			_, keepAliveErr := writer.Write(messageToBytesConverter.Convert(keepAliveMsg))
+			if keepAliveErr != nil {
+				return
 			}
+			continue
+		}
 
-		case <-ctx.Done():
+		_, err = writer.Write(messageToBytesConverter.Convert(nextMsg))
+		if err != nil {
 			return
 		}
 	}
 }
 
-func isKeepAliveActive(keepAliveInterval time.Duration) bool {
-	return keepAliveInterval > 0
+func isKeepAliveActive(keepAliveMsg Messager, keepAliveInterval time.Duration) bool {
+	return keepAliveMsg != nil && keepAliveInterval > 0
 }

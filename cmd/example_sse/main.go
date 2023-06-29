@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/nicowolf91/gosse"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/nicowolf91/gosse"
 )
 
 func main() {
