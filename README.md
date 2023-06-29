@@ -50,23 +50,23 @@ The option `WithChannelIDExtractor` lets you set a custom implementation of the 
 Default: Implementation that extracts the query parameter `channel` from the request and returns a `nil` error and
 `http.StatusOK` as http error code (only relevant when an error is returned).
 
-### Message to bytes converter
+### Message To Bytes Converter
 The option `WithMessageToBytesConverter` allows you to define the way Messages are converted to the byte slice sent
 to the client.
 
 Default: [Implementation](message.go#L33)
 
-### Channel broker
+### Channel Broker
 The option `WithChannelMessageBroker` lets you use your custom implementation of the `ChannelBroker` interface with `ChannelIdType` as `string` and `MessageType` as `Messager`.
 
 Default: [Implementation](channel_broker.go)
 
-### Message store
+### Message Store
 The `WithMessageStorer` option allows the usage of a custom implementation of the `MessageStorer` interface.
 
 Default: Nop [implementation](message.go#L165) storing no messages for replay.
 
-### Message replayer
+### Message Replayer
 The option `WithMessageReplayer` lets you define which messages are to be replayed for a client sending its last event id by implementing the `MessageReplayer` interface.
 
 Default: Nop [implementation](message.go#L171) returning no messages.
