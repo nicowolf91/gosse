@@ -8,7 +8,7 @@ import (
 type Server struct {
 	channelIDExtractor         ChannelIDExtractor
 	messageConverter           MessageToBytesConverter
-	messageBroker              ChannelBroker
+	messageBroker              ChannelBroker[string, Messager]
 	messageStorer              MessageStorer
 	messageReplayer            MessageReplayer
 	listenersAdditionalHeader  http.Header
@@ -20,7 +20,7 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 	ret := &Server{
 		channelIDExtractor:         DefaultChannelIDExtractor,
 		messageConverter:           DefaultMessageToBytesConverter,
-		messageBroker:              NewChannelBroker(),
+		messageBroker:              NewChannelBroker[string, Messager](),
 		messageStorer:              nopMessageStorer{},
 		messageReplayer:            nopMessageReplayer{},
 		listenersAdditionalHeader:  http.Header{},
@@ -39,7 +39,7 @@ func (s *Server) Publish(channelID string, msg Messager) {
 	if msg == nil {
 		return
 	}
-	s.messageBroker.Publish(channelID, s.msgBytes(msg))
+	s.messageBroker.Publish(channelID, msg)
 	s.messageStorer.Store(channelID, msg)
 }
 
@@ -47,7 +47,7 @@ func (s *Server) Broadcast(msg Messager) {
 	if msg == nil {
 		return
 	}
-	s.messageBroker.Broadcast(s.msgBytes(msg))
+	s.messageBroker.Broadcast(msg)
 	s.messageStorer.StoreBroadcast(msg)
 }
 
@@ -70,23 +70,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	serveRequest(
 		r.Context(),
 		sseRequest,
+		s.messageConverter,
 		stream,
-		s.toReplayBytes(replayMessages),
+		replayMessages,
 		s.listenersKeepAliveInterval,
-		s.messageConverter.Convert(s.listenersKeepAliveMessage),
+		s.listenersKeepAliveMessage,
 	)
-}
-
-func (s *Server) msgBytes(msg Messager) []byte {
-	return s.messageConverter.Convert(msg)
-}
-
-func (s *Server) toReplayBytes(messages []Messager) []byte {
-	var ret []byte
-	for _, msg := range messages {
-		ret = append(ret, s.messageConverter.Convert(msg)...)
-	}
-	return ret
 }
 
 type ChannelIDExtractor interface {
@@ -119,7 +108,7 @@ func WithMessageToBytesConverter(m MessageToBytesConverter) ServerOptionSetter {
 	}
 }
 
-func WithChannelMessageBroker(b ChannelBroker) ServerOptionSetter {
+func WithChannelMessageBroker(b ChannelBroker[string, Messager]) ServerOptionSetter {
 	return func(server *Server) {
 		if b != nil {
 			server.messageBroker = b

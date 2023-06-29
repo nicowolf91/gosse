@@ -102,7 +102,7 @@ func (m *Message) WithRetry(d time.Duration) *Message {
 	return m
 }
 
-func (m Message) Event() string {
+func (m *Message) Event() string {
 	return m.event
 }
 
@@ -110,7 +110,7 @@ func (m *Message) SetEvent(e string) {
 	m.event = e
 }
 
-func (m Message) Data() []byte {
+func (m *Message) Data() []byte {
 	return m.data
 }
 
@@ -118,7 +118,7 @@ func (m *Message) SetData(d []byte) {
 	m.data = d
 }
 
-func (m Message) ID() string {
+func (m *Message) ID() string {
 	return m.id
 }
 
@@ -126,7 +126,7 @@ func (m *Message) SetID(id string) {
 	m.id = id
 }
 
-func (m Message) Retry() time.Duration {
+func (m *Message) Retry() time.Duration {
 	return m.retry
 }
 

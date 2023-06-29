@@ -6,28 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestBroker(t *testing.T) {
-	messagesToSend := []interface{}{
-		"test",
-		NewMessage().WithData([]byte("hello world")),
-	}
-
-	broker := NewBroker()
-
-	stream := broker.Subscribe()
-
-	for _, msg := range messagesToSend {
-		broker.Publish(msg)
-	}
-
-	i := 0
-	for stream.HasNext() {
-		assert.Equal(t, messagesToSend[i], stream.Next())
-		i++
-	}
-	assert.Equal(t, len(messagesToSend), i)
-}
-
 func TestChannelBroker(t *testing.T) {
 	messagesToSendOnChannel1 := []interface{}{
 		"ch1",
@@ -46,7 +24,7 @@ func TestChannelBroker(t *testing.T) {
 	expectedMessagesChannel1 := append(messagesToSendOnChannel1, messagesToBroadcast...)
 	expectedMessagesChannel2 := append(messagesToSendOnChannel2, messagesToBroadcast...)
 
-	broker := NewChannelBroker()
+	broker := NewChannelBroker[string, any]()
 
 	channel1Stream := broker.Subscribe("channel1")
 	channel2Stream := broker.Subscribe("channel2")

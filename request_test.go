@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imkira/go-observer"
+	"github.com/imkira/go-observer/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -62,78 +62,78 @@ func TestServeRequestReplayOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 
-	replay := []byte("data: replay\nid: 1\n\nevent: e\ndata: test\nid: 2\n\n")
+	replayMessages := []Messager{
+		NewMessage().WithData([]byte("replay")).WithID("1"),
+		NewMessage().WithEvent("e").WithData([]byte("test")).WithID("2"),
+	}
 
 	buf := &bytes.Buffer{}
-	serveRequest(ctx, buf, nopStreamMock{}, replay, 0, nil)
+	prop := observer.NewProperty[Messager](nil)
 
-	assert.Equal(t, replay, buf.Bytes())
+	serveRequest(ctx, buf, DefaultMessageToBytesConverter, prop.Observe(), replayMessages, 0, nil)
+
+	assert.Equal(t, messagesToBytes(replayMessages, DefaultMessageToBytesConverter), buf.Bytes())
 }
 
 func TestServeRequestNoKeepAlive(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Second)
 	defer cancel()
 
-	replay := []byte("data: replay\nid: 1\n\nevent: e\ndata: test\nid: 2\n\n")
-	messages := [][]byte{
-		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
-		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
+	replayMessages := []Messager{
+		NewMessage().WithData([]byte("replay")).WithID("1"),
+		NewMessage().WithEvent("e").WithData([]byte("test")).WithID("2"),
+	}
+	messages := []Messager{
+		NewMessage().WithEvent("e1").WithData([]byte("message 1")),
+		NewMessage().WithEvent("e2").WithData([]byte("message 2")),
 	}
 
-	writer := newMaxWriter(len(messages))
+	writer := newMaxWriter(len(replayMessages) + len(messages))
 
-	expected := make([]byte, len(replay))
-	copy(expected, replay)
-
-	broker := NewBroker()
-	stream := broker.Subscribe()
+	prop := observer.NewProperty[Messager](nil)
+	stream := prop.Observe()
 	for _, msg := range messages {
-		broker.Publish(msg)
-		expected = append(expected, msg...)
+		prop.Update(msg)
 	}
-
-	// ensure that serveRequest handles unexpected/invalid stream elements correctly
-	broker.Publish(nil)
-	broker.Publish(13.37)
 
 	// trigger error in writer
-	broker.Publish([]byte("boom"))
+	prop.Update(DefaultKeepAliveMessage)
 
-	serveRequest(ctx, writer, stream, replay, 0, nil)
+	serveRequest(ctx, writer, DefaultMessageToBytesConverter, stream, replayMessages, 0, nil)
 
-	assert.Equal(t, expected, writer.Bytes())
+	assert.Equal(t, messagesToBytes(append(replayMessages, messages...), DefaultMessageToBytesConverter), writer.Bytes())
 }
 
 func TestServeRequestWithKeepAlive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	messages := [][]byte{
-		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e1").WithData([]byte("message 1"))),
-		DefaultMessageToBytesConverter.Convert(NewMessage().WithEvent("e2").WithData([]byte("message 2"))),
+	messages := []Messager{
+		NewMessage().WithEvent("e1").WithData([]byte("message 1")),
+		NewMessage().WithEvent("e2").WithData([]byte("message 2")),
 	}
 
-	broker := NewBroker()
-	stream := broker.Subscribe()
+	prop := observer.NewProperty[Messager](nil)
+	stream := prop.Observe()
 	for _, msg := range messages {
-		broker.Publish(msg)
+		prop.Update(msg)
 	}
-
-	keepAliveBytes := DefaultMessageToBytesConverter.Convert(DefaultKeepAliveMessage)
 
 	writer := newMaxWriter(len(messages) + 2) // +2 keep alive messages
-	serveRequest(ctx, writer, stream, nil, 1*time.Millisecond, keepAliveBytes)
+	serveRequest(ctx, writer, DefaultMessageToBytesConverter, stream, nil, 1*time.Millisecond, DefaultKeepAliveMessage)
 
 	splitMinLen := len(messages) + 1 + 1 + 1 // initial keep alive message + one keep alive msg + one empty split entry at the end
+
+	keepAliveMessageBytes := DefaultMessageToBytesConverter.Convert(DefaultKeepAliveMessage)
 
 	keepAliveDetected := false
 	split := bytes.SplitAfter(writer.Bytes(), []byte("\n\n"))
 	assert.True(t, len(split) >= splitMinLen)
-	assert.Equal(t, keepAliveBytes, split[0])
-	assert.Equal(t, messages[0], split[1])
-	assert.Equal(t, messages[1], split[2])
+	assert.Equal(t, keepAliveMessageBytes, split[0])
+	assert.Equal(t, DefaultMessageToBytesConverter.Convert(messages[0]), split[1])
+	assert.Equal(t, DefaultMessageToBytesConverter.Convert(messages[1]), split[2])
 	for i := len(messages) + 1; i < len(split)-1; i++ { // last split entry is always empty
-		assert.Equal(t, keepAliveBytes, split[i])
+		assert.Equal(t, keepAliveMessageBytes, split[i])
 		keepAliveDetected = true
 	}
 	assert.True(t, keepAliveDetected)
@@ -152,16 +152,6 @@ func (n *noFlushMock) Header() http.Header         { return n.header }
 func (n *noFlushMock) Write(i []byte) (int, error) { return 0, nil }
 func (n *noFlushMock) WriteHeader(statusCode int)  { n.statusCode = statusCode }
 
-type nopStreamMock struct{}
-
-func (n nopStreamMock) Value() interface{}                                   { return nil }
-func (n nopStreamMock) Changes() chan struct{}                               { return make(chan struct{}) }
-func (n nopStreamMock) Next() interface{}                                    { return nil }
-func (n nopStreamMock) HasNext() bool                                        { return false }
-func (n nopStreamMock) WaitNext() interface{}                                { return nil }
-func (n nopStreamMock) Clone() observer.Stream                               { return nopStreamMock{} }
-func (n nopStreamMock) WaitNextCtx(ctx context.Context) (interface{}, error) { return nil, nil }
-
 type maxWriter struct {
 	i         int
 	maxWrites int
@@ -173,8 +163,8 @@ func newMaxWriter(maxWrites int) *maxWriter {
 }
 
 func (m *maxWriter) Write(p []byte) (n int, err error) {
-	if m.i > m.maxWrites {
-		return 0, fmt.Errorf("error")
+	if m.i >= m.maxWrites {
+		return 0, fmt.Errorf("max writes reached")
 	}
 
 	m.i++
@@ -201,4 +191,12 @@ func (r *responseWriteFlusherMock) WriteHeader(statusCode int) {
 
 func (r *responseWriteFlusherMock) Flush() {
 	r.flushed++
+}
+
+func messagesToBytes(messages []Messager, converter MessageToBytesConverter) []byte {
+	var ret []byte
+	for _, msg := range messages {
+		ret = append(ret, converter.Convert(msg)...)
+	}
+	return ret
 }

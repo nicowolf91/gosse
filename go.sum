@@ -2,6 +2,8 @@ github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/imkira/go-observer v1.0.3 h1:l45TYAEeAB4L2xF6PR2gRLn2NE5tYhudh33MLmC7B80=
 github.com/imkira/go-observer v1.0.3/go.mod h1:zLzElv2cGTHufQG17IEILJMPDg32TD85fFgKyFv00wU=
+github.com/imkira/go-observer/v2 v2.0.0-20230629064422-8e0b61f11f1b h1:1+115FqGoS8p6Iry9AYmrcWDvSveH0F7P2nX1LU00qg=
+github.com/imkira/go-observer/v2 v2.0.0-20230629064422-8e0b61f11f1b/go.mod h1:XCscqBi1KKh7GcVDDAdkT/Cf6WDjnDAA1XM3nwmA0Ag=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
