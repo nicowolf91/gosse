@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -24,10 +26,10 @@ func TestServerConstructorDefaults(t *testing.T) {
 		WithListenersAdditionalHeader(http.Header{}),
 		WithListenersKeepAliveInterval(10*time.Second),
 		WithListenersKeepAliveMessage(DefaultKeepAliveMessage),
+		WithServeContext(defaultServeContext),
 	)
 
 	server := NewServer()
-	assert.Equal(t, server, serverWithDefaultValues)
 	assert.Equal(t, DefaultChannelIDExtractor, serverWithDefaultValues.channelIDExtractor)
 	assert.Equal(t, DefaultMessageToBytesConverter, serverWithDefaultValues.messageConverter)
 	assert.Equal(t, NewChannelBroker[string, Messager](), serverWithDefaultValues.messageBroker)
@@ -36,6 +38,9 @@ func TestServerConstructorDefaults(t *testing.T) {
 	assert.Equal(t, http.Header{}, serverWithDefaultValues.listenersAdditionalHeader)
 	assert.Equal(t, 10*time.Second, serverWithDefaultValues.listenersKeepAliveInterval)
 	assert.Equal(t, DefaultKeepAliveMessage, serverWithDefaultValues.listenersKeepAliveMessage)
+	funcName1 := runtime.FuncForPC(reflect.ValueOf(defaultServeContext).Pointer()).Name()
+	funcName2 := runtime.FuncForPC(reflect.ValueOf(server.serveContext).Pointer()).Name()
+	assert.Equal(t, funcName1, funcName2)
 }
 
 func TestServerConstructor(t *testing.T) {
@@ -48,6 +53,9 @@ func TestServerConstructor(t *testing.T) {
 	additionalHeader.Set("test", "123")
 	keepAliveInterval := 1337 * time.Millisecond
 	keepAliveMessage := NewMessage().WithData([]byte(": stay awake!"))
+	serveContextFunc := func(r *http.Request) context.Context {
+		return context.TODO()
+	}
 
 	server := NewServer(
 		WithChannelIDExtractor(extractor),
@@ -58,6 +66,7 @@ func TestServerConstructor(t *testing.T) {
 		WithListenersAdditionalHeader(additionalHeader),
 		WithListenersKeepAliveInterval(keepAliveInterval),
 		WithListenersKeepAliveMessage(keepAliveMessage),
+		WithServeContext(serveContextFunc),
 	)
 
 	assert.Equal(t, extractor, server.channelIDExtractor)
@@ -68,6 +77,9 @@ func TestServerConstructor(t *testing.T) {
 	assert.Equal(t, additionalHeader, server.listenersAdditionalHeader)
 	assert.Equal(t, keepAliveInterval, server.listenersKeepAliveInterval)
 	assert.Equal(t, keepAliveMessage, server.listenersKeepAliveMessage)
+	funcName1 := runtime.FuncForPC(reflect.ValueOf(serveContextFunc).Pointer()).Name()
+	funcName2 := runtime.FuncForPC(reflect.ValueOf(server.serveContext).Pointer()).Name()
+	assert.Equal(t, funcName1, funcName2)
 }
 
 func TestServer_PublishBroadcast(t *testing.T) {
@@ -136,7 +148,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 
 	request := httptest.NewRequest("GET", requestUrl.String(), nil)
 	request.Header.Set("Last-Event-ID", "1337")
-	ctx, cancel := context.WithCancel(request.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	replayMessages := []Messager{
@@ -144,7 +156,12 @@ func TestServer_ServeHTTP(t *testing.T) {
 		NewMessage().WithData([]byte("replay 2")),
 	}
 	replayer := &messageReplayerMock{ret: replayMessages}
-	server := NewServer(WithMessageReplayer(replayer))
+	server := NewServer(
+		WithMessageReplayer(replayer),
+		WithServeContext(func(r *http.Request) context.Context {
+			return ctx
+		}),
+	)
 
 	recorder := httptest.NewRecorder()
 	server.ServeHTTP(recorder, request.WithContext(ctx))

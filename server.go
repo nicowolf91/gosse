@@ -1,6 +1,7 @@
 package gosse
 
 import (
+	"context"
 	"net/http"
 	"time"
 )
@@ -14,6 +15,7 @@ type Server struct {
 	listenersAdditionalHeader  http.Header
 	listenersKeepAliveInterval time.Duration
 	listenersKeepAliveMessage  Messager
+	serveContext               func(r *http.Request) context.Context
 }
 
 func NewServer(optionSetters ...ServerOptionSetter) *Server {
@@ -26,6 +28,7 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 		listenersAdditionalHeader:  http.Header{},
 		listenersKeepAliveInterval: 10 * time.Second,
 		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
+		serveContext:               defaultServeContext,
 	}
 
 	for _, setter := range optionSetters {
@@ -68,7 +71,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stream := s.messageBroker.Subscribe(channelID)
 
 	serveRequest(
-		r.Context(),
+		s.serveContext(r),
 		sseRequest,
 		s.messageConverter,
 		stream,
@@ -150,4 +153,14 @@ func WithListenersKeepAliveMessage(msg Messager) ServerOptionSetter {
 			server.listenersKeepAliveMessage = msg
 		}
 	}
+}
+
+func WithServeContext(f func(r *http.Request) context.Context) ServerOptionSetter {
+	return func(server *Server) {
+		server.serveContext = f
+	}
+}
+
+var defaultServeContext = func(r *http.Request) context.Context {
+	return r.Context()
 }
