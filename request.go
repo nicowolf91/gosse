@@ -86,9 +86,12 @@ func serveRequest(
 	}
 
 	for {
-		innerCtx, cancel := context.WithCancel(baseCtx)
+		var innerCtx context.Context
+		var cancel context.CancelFunc
 		if isKeepAliveActive(keepAliveMsg, keepAliveInterval) {
 			innerCtx, cancel = context.WithTimeout(baseCtx, keepAliveInterval)
+		} else {
+			innerCtx, cancel = context.WithCancel(baseCtx)
 		}
 
 		nextMsg, err := stream.WaitNextCtx(innerCtx)
