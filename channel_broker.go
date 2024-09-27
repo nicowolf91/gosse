@@ -14,7 +14,7 @@ type ChannelBroker[ChannelIdType comparable, MessageType any] interface {
 
 type channelBroker[ChannelIdType comparable, MessageType any] struct {
 	props map[ChannelIdType]observer.Property[MessageType]
-	m     sync.Mutex
+	m     sync.RWMutex
 }
 
 func NewChannelBroker[ChannelIdType comparable, MessageType any]() ChannelBroker[ChannelIdType, MessageType] {
@@ -28,6 +28,9 @@ func (b *channelBroker[ChannelIdType, MessageType]) Publish(channelID ChannelIdT
 }
 
 func (b *channelBroker[ChannelIdType, MessageType]) Broadcast(msg MessageType) {
+	b.m.RLock()
+	defer b.m.RUnlock()
+
 	for _, prop := range b.props {
 		prop.Update(msg)
 	}
