@@ -1,8 +1,6 @@
 module github.com/nicowolf91/gosse
 
-go 1.25
-
-toolchain go1.25.4
+go 1.23
 
 require (
 	github.com/imkira/go-observer/v2 v2.0.0-20230629064422-8e0b61f11f1b
