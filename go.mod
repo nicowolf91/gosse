@@ -6,7 +6,7 @@ toolchain go1.25.4
 
 require (
 	github.com/imkira/go-observer/v2 v2.0.0-20230629064422-8e0b61f11f1b
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
