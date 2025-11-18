@@ -71,11 +71,11 @@ The option `WithMessageReplayer` lets you define which messages are to be replay
 
 Default: Nop [implementation](message.go#L171) returning no messages.
 
-### Additional Headers
-The `WithListenersAdditionalHeader` option lets you define http headers that are sent to the client additionally
-to the default key `Content-Type` with value `text/event-stream` indicating SSE streaming.
+### Modifying the Response
+The `WithResponseModifierFunc` option lets you set a function to modify the initial http response before it's sent to the client.
+This option might be useful if you want to modify the http headers sent to the client.
 
-Default: empty
+Default: nil, i.e. no modifications.
 
 ### Listeners Keep Alive Interval
 The `WithListenersKeepAliveInterval` option allows you to define the time interval that is used to send periodic

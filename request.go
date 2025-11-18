@@ -26,7 +26,6 @@ type Request struct {
 func NewRequest(
 	w http.ResponseWriter,
 	r *http.Request,
-	additionalHeader http.Header,
 ) (*Request, error) {
 	rwf, ok := w.(ResponseWriteFlusher)
 	if !ok {
@@ -34,12 +33,6 @@ func NewRequest(
 	}
 
 	rwf.Header().Set("Content-Type", "text/event-stream")
-
-	for key, values := range additionalHeader {
-		for _, value := range values {
-			rwf.Header().Add(key, value)
-		}
-	}
 
 	rwf.WriteHeader(http.StatusOK)
 	rwf.Flush()

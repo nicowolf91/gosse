@@ -15,12 +15,12 @@ import (
 
 func TestNewRequest(t *testing.T) {
 	recorder := httptest.NewRecorder()
+	recorder.Header().Set("Content-Type", "foobar") // this one should be overridden
+	recorder.Header().Set("Cache-Control", "no-cache")
+	recorder.Header().Set("Connection", "keep-alive")
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", &bytes.Buffer{})
 	req.Header.Set("Last-Event-ID", "123")
-	additionalHeader := http.Header{}
-	additionalHeader.Set("Cache-Control", "no-cache")
-	additionalHeader.Set("Connection", "keep-alive")
-	sseRequest, err := NewRequest(recorder, req, additionalHeader)
+	sseRequest, err := NewRequest(recorder, req)
 	assert.NoError(t, err)
 	assert.True(t, recorder.Flushed)
 	assert.Equal(t, http.StatusOK, recorder.Code)
@@ -32,7 +32,7 @@ func TestNewRequest(t *testing.T) {
 }
 
 func TestNewRequestNoFlusher(t *testing.T) {
-	_, err := NewRequest(&noFlushMock{}, nil, nil)
+	_, err := NewRequest(&noFlushMock{}, nil)
 	assert.Error(t, err)
 	assert.Equal(t, ErrStreamingNotSupported, err)
 }

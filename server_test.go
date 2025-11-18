@@ -23,7 +23,7 @@ func TestServerConstructorDefaults(t *testing.T) {
 		WithChannelMessageBroker(NewChannelBroker[string, Messager]()),
 		WithMessageStorer(nopMessageStorer{}),
 		WithMessageReplayer(nopMessageReplayer{}),
-		WithListenersAdditionalHeader(http.Header{}),
+		WithResponseModifierFunc(nil),
 		WithListenersKeepAliveInterval(10*time.Second),
 		WithListenersKeepAliveMessage(DefaultKeepAliveMessage),
 		WithServeContext(defaultServeContext),
@@ -35,7 +35,7 @@ func TestServerConstructorDefaults(t *testing.T) {
 	assert.Equal(t, NewChannelBroker[string, Messager](), serverWithDefaultValues.messageBroker)
 	assert.Equal(t, nopMessageStorer{}, serverWithDefaultValues.messageStorer)
 	assert.Equal(t, nopMessageReplayer{}, serverWithDefaultValues.messageReplayer)
-	assert.Equal(t, http.Header{}, serverWithDefaultValues.listenersAdditionalHeader)
+	assert.Nil(t, serverWithDefaultValues.responseModifierFunc)
 	assert.Equal(t, 10*time.Second, serverWithDefaultValues.listenersKeepAliveInterval)
 	assert.Equal(t, DefaultKeepAliveMessage, serverWithDefaultValues.listenersKeepAliveMessage)
 	funcName1 := runtime.FuncForPC(reflect.ValueOf(defaultServeContext).Pointer()).Name()
@@ -49,8 +49,7 @@ func TestServerConstructor(t *testing.T) {
 	broker := newChannelBrokerMock[string, Messager]()
 	storer := newMessageStorerMock()
 	replayer := &messageReplayerMock{}
-	additionalHeader := http.Header{}
-	additionalHeader.Set("test", "123")
+	responseModifierFunc := func(_ http.ResponseWriter) {}
 	keepAliveInterval := 1337 * time.Millisecond
 	keepAliveMessage := NewMessage().WithData([]byte(": stay awake!"))
 	serveContextFunc := func(r *http.Request) context.Context {
@@ -63,7 +62,7 @@ func TestServerConstructor(t *testing.T) {
 		WithChannelMessageBroker(broker),
 		WithMessageStorer(storer),
 		WithMessageReplayer(replayer),
-		WithListenersAdditionalHeader(additionalHeader),
+		WithResponseModifierFunc(responseModifierFunc),
 		WithListenersKeepAliveInterval(keepAliveInterval),
 		WithListenersKeepAliveMessage(keepAliveMessage),
 		WithServeContext(serveContextFunc),
@@ -74,7 +73,9 @@ func TestServerConstructor(t *testing.T) {
 	assert.Equal(t, broker, server.messageBroker)
 	assert.Equal(t, storer, server.messageStorer)
 	assert.Equal(t, replayer, server.messageReplayer)
-	assert.Equal(t, additionalHeader, server.listenersAdditionalHeader)
+	headerModifierFuncName1 := runtime.FuncForPC(reflect.ValueOf(responseModifierFunc).Pointer()).Name()
+	headerModifierFuncName2 := runtime.FuncForPC(reflect.ValueOf(server.responseModifierFunc).Pointer()).Name()
+	assert.Equal(t, headerModifierFuncName1, headerModifierFuncName2)
 	assert.Equal(t, keepAliveInterval, server.listenersKeepAliveInterval)
 	assert.Equal(t, keepAliveMessage, server.listenersKeepAliveMessage)
 	funcName1 := runtime.FuncForPC(reflect.ValueOf(serveContextFunc).Pointer()).Name()

@@ -12,7 +12,7 @@ type Server struct {
 	messageBroker              ChannelBroker[string, Messager]
 	messageStorer              MessageStorer
 	messageReplayer            MessageReplayer
-	listenersAdditionalHeader  http.Header
+	responseModifierFunc       func(http.ResponseWriter)
 	listenersKeepAliveInterval time.Duration
 	listenersKeepAliveMessage  Messager
 	serveContext               func(r *http.Request) context.Context
@@ -25,7 +25,7 @@ func NewServer(optionSetters ...ServerOptionSetter) *Server {
 		messageBroker:              NewChannelBroker[string, Messager](),
 		messageStorer:              nopMessageStorer{},
 		messageReplayer:            nopMessageReplayer{},
-		listenersAdditionalHeader:  http.Header{},
+		responseModifierFunc:       nil,
 		listenersKeepAliveInterval: 10 * time.Second,
 		listenersKeepAliveMessage:  DefaultKeepAliveMessage,
 		serveContext:               defaultServeContext,
@@ -61,7 +61,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sseRequest, err := NewRequest(w, r, s.listenersAdditionalHeader)
+	if s.responseModifierFunc != nil {
+		s.responseModifierFunc(w)
+	}
+
+	sseRequest, err := NewRequest(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -135,9 +139,9 @@ func WithMessageReplayer(m MessageReplayer) ServerOptionSetter {
 	}
 }
 
-func WithListenersAdditionalHeader(h http.Header) ServerOptionSetter {
+func WithResponseModifierFunc(f func(w http.ResponseWriter)) ServerOptionSetter {
 	return func(server *Server) {
-		server.listenersAdditionalHeader = h
+		server.responseModifierFunc = f
 	}
 }
 
