@@ -2,7 +2,7 @@ package gosse
 
 import (
 	"bytes"
-	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -26,45 +26,71 @@ type MessageToBytesConverter interface {
 	Convert(Messager) []byte
 }
 
-var DefaultMessageToBytesConverter = defaultMessageToBytesConverter{}
+var DefaultMessageToBytesConverter = &defaultMessageToBytesConverter{}
 
 type defaultMessageToBytesConverter struct{}
 
-func (d defaultMessageToBytesConverter) Convert(msg Messager) []byte {
+func (d *defaultMessageToBytesConverter) Convert(msg Messager) []byte {
 	if msg == nil {
 		return nil
 	}
 
-	var ret []byte
+	event := msg.Event()
+	data := msg.Data()
+	id := msg.ID()
+	retry := msg.Retry()
 
-	if len(msg.Event()) > 0 {
-		ret = append(ret, []byte(fmt.Sprintf("event: %s\n", msg.Event()))...)
+	estimate := len(event) + len(data) + len(id) + 24
+	var retryStr string
+	if retry > 0 {
+		retryStr = strconv.FormatInt(retry.Milliseconds(), 10)
+		estimate += len(retryStr)
 	}
 
-	if len(msg.Data()) > 0 {
-		dataCopy := make([]byte, len(msg.Data()))
-		copy(dataCopy, msg.Data())
+	buf := bytes.NewBuffer(make([]byte, 0, estimate))
 
-		bytes.ReplaceAll(dataCopy, []byte("\r\n"), []byte("\n"))
+	if len(event) > 0 {
+		buf.WriteString("event: ")
+		buf.WriteString(event)
+		buf.WriteByte('\n')
+	}
 
-		for _, dataBytes := range bytes.FieldsFunc(dataCopy, func(r rune) bool { return r == '\n' || r == '\r' }) {
-			if bytes.HasPrefix(dataBytes, []byte(":")) {
-				ret = append(ret, []byte(fmt.Sprintf("%s\n", dataBytes))...)
-			} else {
-				ret = append(ret, []byte(fmt.Sprintf("data: %s\n", dataBytes))...)
+	if len(data) > 0 {
+		start := 0
+		for i := 0; i <= len(data); i++ {
+			if i == len(data) || data[i] == '\n' || data[i] == '\r' {
+				if i > start {
+					line := data[start:i]
+					if line[0] == ':' {
+						buf.Write(line)
+					} else {
+						buf.WriteString("data: ")
+						buf.Write(line)
+					}
+					buf.WriteByte('\n')
+				}
+				if i < len(data) && data[i] == '\r' && i+1 < len(data) && data[i+1] == '\n' {
+					i++
+				}
+				start = i + 1
 			}
 		}
 	}
 
-	if len(msg.ID()) > 0 {
-		ret = append(ret, []byte(fmt.Sprintf("id: %s\n", msg.ID()))...)
+	if len(id) > 0 {
+		buf.WriteString("id: ")
+		buf.WriteString(id)
+		buf.WriteByte('\n')
 	}
 
-	if msg.Retry() > 0 {
-		ret = append(ret, []byte(fmt.Sprintf("retry: %d\n", msg.Retry().Milliseconds()))...)
+	if retry > 0 {
+		buf.WriteString("retry: ")
+		buf.WriteString(retryStr)
+		buf.WriteByte('\n')
 	}
 
-	return append(ret, '\n')
+	buf.WriteByte('\n')
+	return buf.Bytes()
 }
 
 type Message struct {

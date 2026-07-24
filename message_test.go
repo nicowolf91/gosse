@@ -1,6 +1,8 @@
 package gosse
 
 import (
+	"bytes"
+	"sync"
 	"testing"
 	"time"
 
@@ -132,6 +134,47 @@ func TestDefaultMessageToBytesConverter(t *testing.T) {
 				WithRetry(1 * time.Millisecond),
 			expected: []byte("event: e\ndata: data\nid: 7\nretry: 1\n\n"),
 		},
+
+		"empty data": {
+			msg:      NewMessage().WithData([]byte("")),
+			expected: []byte("\n"),
+		},
+		"whitespace-only data": {
+			msg:      NewMessage().WithData([]byte("   ")),
+			expected: []byte("data:    \n\n"),
+		},
+		"data with blank line in middle": {
+			msg:      NewMessage().WithData([]byte("a\n\nb")),
+			expected: []byte("data: a\ndata: b\n\n"),
+		},
+		"data with leading newline": {
+			msg:      NewMessage().WithData([]byte("\nhello")),
+			expected: []byte("data: hello\n\n"),
+		},
+		"data with trailing newline": {
+			msg:      NewMessage().WithData([]byte("hello\n")),
+			expected: []byte("data: hello\n\n"),
+		},
+		"data with consecutive \\r\\n\\r\\n": {
+			msg:      NewMessage().WithData([]byte("a\r\n\r\nb")),
+			expected: []byte("data: a\ndata: b\n\n"),
+		},
+		"retry zero": {
+			msg:      NewMessage().WithRetry(0),
+			expected: []byte("\n"),
+		},
+		"retry negative": {
+			msg:      NewMessage().WithRetry(-1 * time.Millisecond),
+			expected: []byte("\n"),
+		},
+		"empty comment colon only": {
+			msg:      NewMessage().WithData([]byte(":")),
+			expected: []byte(":\n\n"),
+		},
+		"large data payload": {
+			msg:      NewMessage().WithData(bytes.Repeat([]byte("x"), 10000)),
+			expected: append([]byte("data: "), append(bytes.Repeat([]byte("x"), 10000), '\n', '\n')...),
+		},
 	}
 
 	for name, tc := range testCases {
@@ -139,4 +182,25 @@ func TestDefaultMessageToBytesConverter(t *testing.T) {
 			assert.Equal(t, tc.expected, DefaultMessageToBytesConverter.Convert(tc.msg))
 		})
 	}
+}
+
+func TestDefaultMessageToBytesConverter_Concurrent(t *testing.T) {
+	msg := NewMessage().
+		WithEvent("concurrent").
+		WithData([]byte("payload\nline2")).
+		WithID("cid").
+		WithRetry(50 * time.Millisecond)
+
+	expected := []byte("event: concurrent\ndata: payload\ndata: line2\nid: cid\nretry: 50\n\n")
+
+	var wg sync.WaitGroup
+	for range 100 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got := DefaultMessageToBytesConverter.Convert(msg)
+			assert.Equal(t, expected, got)
+		}()
+	}
+	wg.Wait()
 }
